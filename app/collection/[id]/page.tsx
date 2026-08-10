@@ -182,8 +182,8 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
               
               return (
                 <Link
-                  key={file.linkid}
-                  href={`/movie/${file.linkid}`}
+                  key={video.linkid}
+                  href={`/movie/${video.linkid}`}
                   className="group relative bg-zinc-800 rounded-xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-red-500/20"
                 >
                   <div className="relative aspect-video overflow-hidden">
