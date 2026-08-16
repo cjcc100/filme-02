@@ -8,6 +8,7 @@ const MANUAL_MAPPING: Record<string, number> = {
   'quarteto fantastico primeiros passos': 617126,
   'a ultima casa': 1284041,
   'ultima casa': 1284041,
+  'avenida brasil': 45815,
 };
 
 export async function GET() {
@@ -69,7 +70,7 @@ export async function GET() {
           tmdbId = MANUAL_MAPPING[normalizedName].toString();
           console.log(`Using manual mapping for: ${fileName} -> TMDb ID: ${tmdbId}`);
         } else {
-          // Buscar no TMDb
+          // Buscar no TMDb como filme primeiro
           const searchRes = await fetch(
             `${config.tmdb.baseUrl}/search/movie?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanName)}`
           );
@@ -78,6 +79,21 @@ export async function GET() {
             const searchData = await searchRes.json();
             if (searchData.results && searchData.results.length > 0) {
               tmdbId = searchData.results[0].id.toString();
+            }
+          }
+          
+          // Se não encontrou como filme, buscar como série (TV)
+          if (!tmdbId) {
+            const tvSearchRes = await fetch(
+              `${config.tmdb.baseUrl}/search/tv?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanName)}`
+            );
+
+            if (tvSearchRes.ok) {
+              const tvSearchData = await tvSearchRes.json();
+              if (tvSearchData.results && tvSearchData.results.length > 0) {
+                tmdbId = tvSearchData.results[0].id.toString();
+                console.log(`Found as TV series: ${fileName} -> TMDb ID: ${tmdbId}`);
+              }
             }
           }
         }

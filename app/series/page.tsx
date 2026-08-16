@@ -51,7 +51,8 @@ export default async function SeriesPage() {
   
   // Mapeamento de pastas Streamtape para IDs TMDb
   const folderMappings: Record<string, { seriesId: string; seasonNumber: string }> = {
-    'Je_MCGJs5lQ': { seriesId: '4604', seasonNumber: '1' } // Smallville Temporada 1
+    'Je_MCGJs5lQ': { seriesId: '4604', seasonNumber: '1' }, // Smallville Temporada 1
+    'WAP4-waQ7H8': { seriesId: '45815', seasonNumber: '1' } // Avenida Brasil Temporada 1
   };
   
   // Enriquecer pastas com dados TMDb
