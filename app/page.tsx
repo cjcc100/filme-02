@@ -203,7 +203,7 @@ export default async function Home() {
       const fileName = file.name || '';
       console.log('Processing file:', fileName);
       const tmdbData = fileName ? await searchTMDBMovie(fileName) : null;
-      console.log('TMDb result for', fileName, ':', tmdbData ? 'FOUND' : 'NOT FOUND');
+      console.log('TMDb result for', fileName, ':', tmdbData ? `FOUND (ID: ${tmdbData.id})` : 'NOT FOUND');
       
       return {
         ...file,
