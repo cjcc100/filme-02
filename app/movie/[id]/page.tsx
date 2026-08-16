@@ -61,6 +61,8 @@ async function searchTMDBMovie(query: string): Promise<any | null> {
   try {
     const tmdbApiKey = config.tmdb.apiKey;
     
+    console.log('Original query:', query);
+    
     // Função melhorada de limpeza de nome com remoção de acentos
     function cleanFileName(filename: string): string {
       return filename
@@ -77,6 +79,8 @@ async function searchTMDBMovie(query: string): Promise<any | null> {
     
     // Primeira tentativa: limpeza completa sem acentos
     let cleanQuery = cleanFileName(query);
+    
+    console.log('Clean query (attempt 1):', cleanQuery);
     
     if (cleanQuery.length < 3) return null;
     
@@ -100,6 +104,8 @@ async function searchTMDBMovie(query: string): Promise<any | null> {
       .replace(/[._-]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
+    
+    console.log('Clean query (attempt 2):', cleanQuery);
     
     if (cleanQuery.length < 3) return null;
     
@@ -125,6 +131,8 @@ async function searchTMDBMovie(query: string): Promise<any | null> {
         .replace(/[\u0300-\u036f]/g, '')
         .trim();
       
+      console.log('Clean query (attempt 3):', cleanQuery);
+      
       console.log('Searching TMDb (attempt 3):', cleanQuery);
       
       searchRes = await fetch(`${config.tmdb.baseUrl}/search/movie?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanQuery)}`, {
@@ -148,6 +156,8 @@ async function searchTMDBMovie(query: string): Promise<any | null> {
       .replace(/a o/gi, '')
       .replace(/\s+/g, ' ')
       .trim();
+    
+    console.log('Clean query (attempt 4):', cleanQueryExtra);
     
     if (cleanQueryExtra.length >= 3 && cleanQueryExtra !== cleanFileName(query)) {
       console.log('Searching TMDb (attempt 4):', cleanQueryExtra);
@@ -350,8 +360,8 @@ export default async function MoviePage({ params }: { params: Promise<{ id: stri
     );
   }
   
-  // Se for ID do TMDb mas não encontrar dados, mostrar erro
-  if (isTmdbId && !movieData) {
+  // Se não tiver dados do TMDb, mostrar mensagem de erro ou página simplificada
+  if (!movieData) {
     return (
       <div className="flex flex-col min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900">
         <header className="sticky top-0 z-50 bg-zinc-900/30 backdrop-blur-md border-b border-zinc-800/30">
@@ -369,8 +379,16 @@ export default async function MoviePage({ params }: { params: Promise<{ id: stri
 
         <main className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <h1 className="text-2xl text-white mb-4">Filme não encontrado</h1>
-            <p className="text-zinc-300 mb-4">ID do filme: {movieId}</p>
+            <h1 className="text-2xl text-white mb-4">Filme não encontrado no TMDb</h1>
+            <p className="text-zinc-300 mb-2">ID do filme: {movieId}</p>
+            {fileName && <p className="text-zinc-400 mb-4">Arquivo: {fileName}</p>}
+            <p className="text-zinc-400 mb-4">Não foi possível encontrar informações deste filme na base de dados do TMDb.</p>
+            {finalFileId && finalFileId !== TEST_FILE_ID && (
+              <div className="mb-4">
+                <p className="text-zinc-300 mb-2">Você pode assistir diretamente:</p>
+                <VideoPlayer fileId={finalFileId} onClose={() => {}} />
+              </div>
+            )}
             <Link href="/" className="text-red-500 hover:text-red-400 transition-colors">
               Voltar para a página inicial
             </Link>
@@ -381,6 +399,6 @@ export default async function MoviePage({ params }: { params: Promise<{ id: stri
   }
 
   return (
-    <MovieClient movieData={movieData!} fileId={finalFileId} />
+    <MovieClient movieData={movieData} fileId={finalFileId} />
   );
 }

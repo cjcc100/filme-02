@@ -16,7 +16,7 @@ async function getStreamtapeFiles() {
       headers: {
         'Accept': 'application/json',
       },
-      next: { revalidate: 300 } // Cache de 5 minutos para pegar novos uploads
+      next: { revalidate: 0 } // Sem cache para testar
     });
     if (!res.ok) return null;
     
@@ -35,6 +35,8 @@ async function searchTMDBMovie(query: string) {
   try {
     const tmdbApiKey = config.tmdb.apiKey;
     
+    console.log('Original query:', query);
+    
     // Função melhorada de limpeza de nome com remoção de acentos
     function cleanFileName(filename: string): string {
       return filename
@@ -51,6 +53,8 @@ async function searchTMDBMovie(query: string) {
     
     // Primeira tentativa: limpeza completa sem acentos
     let cleanQuery = cleanFileName(query);
+    
+    console.log('Clean query (attempt 1):', cleanQuery);
     
     if (cleanQuery.length < 3) return null;
     
@@ -74,6 +78,8 @@ async function searchTMDBMovie(query: string) {
       .replace(/[._-]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
+    
+    console.log('Clean query (attempt 2):', cleanQuery);
     
     if (cleanQuery.length < 3) return null;
     
@@ -99,6 +105,8 @@ async function searchTMDBMovie(query: string) {
         .replace(/[\u0300-\u036f]/g, '')
         .trim();
       
+      console.log('Clean query (attempt 3):', cleanQuery);
+      
       console.log('Searching TMDb (attempt 3):', cleanQuery);
       
       searchRes = await fetch(`${config.tmdb.baseUrl}/search/movie?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanQuery)}`, {
@@ -122,6 +130,8 @@ async function searchTMDBMovie(query: string) {
       .replace(/a o/gi, '')
       .replace(/\s+/g, ' ')
       .trim();
+    
+    console.log('Clean query (attempt 4):', cleanQueryExtra);
     
     if (cleanQueryExtra.length >= 3 && cleanQueryExtra !== cleanFileName(query)) {
       console.log('Searching TMDb (attempt 4):', cleanQueryExtra);
@@ -157,7 +167,9 @@ export default async function Home() {
   const enrichedFiles = await Promise.all(
     files.map(async (file: any) => {
       const fileName = file.name || '';
+      console.log('Processing file:', fileName);
       const tmdbData = fileName ? await searchTMDBMovie(fileName) : null;
+      console.log('TMDb result for', fileName, ':', tmdbData ? 'FOUND' : 'NOT FOUND');
       
       return {
         ...file,
