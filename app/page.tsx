@@ -31,23 +31,14 @@ async function getStreamtapeFiles() {
   }
 }
 
-// Mapeamento manual para filmes que dão problema na busca automática
+// Mapeamento manual para filmes que dão problema na busca automática (backup)
 const MANUAL_MAPPING: Record<string, number> = {
   'gigantes de aço': 39254,
   'gigantes de aco': 39254,
-  'gigantes de aço 2011': 39254,
-  'gigantes de aco 2011': 39254,
-  'gigantes de aço 2011.mkv': 39254,
-  'gigantes de aço 2011.mkv.mp4': 39254,
   'quarteto fantastico': 617126,
   'quarteto fantastico primeiros passos': 617126,
-  'quarteto fantastico primeiros passos 2025': 617126,
-  'quarteto fantastico primeiros passos 2025.mkv': 617126,
-  'quarteto fantastico primeiros passos 2025.mkv.mp4': 617126,
   'a ultima casa': 1284041,
   'ultima casa': 1284041,
-  'a ultima casa 2026': 1284041,
-  'a ultima casa 2026.mp4': 1284041,
 };
 
 async function searchTMDBMovie(query: string) {
@@ -56,7 +47,21 @@ async function searchTMDBMovie(query: string) {
     
     console.log('Original query:', query);
     
-    // Verificar mapeamento manual primeiro - tentar várias normalizações
+    // Função melhorada de limpeza de nome com remoção de acentos
+    function cleanFileName(filename: string): string {
+      return filename
+        .split('.')[0] // Remover extensão (tudo após o primeiro ponto)
+        .replace(/\d{4}/g, '') // Remover anos de 4 dígitos
+        .replace(/\[.*?\]/g, '') // Remover conteúdo entre colchetes
+        .replace(/\(.*?\)/g, '') // Remover conteúdo entre parênteses
+        .replace(/[._-]/g, ' ') // Substituir separadores por espaço
+        .replace(/\s+/g, ' ') // Remover espaços extras
+        .normalize('NFD') // Normalizar caracteres acentuados
+        .replace(/[\u0300-\u036f]/g, '') // Remover acentos
+        .trim();
+    }
+    
+    // Verificar mapeamento manual primeiro (backup)
     const variations = [
       query.toLowerCase(),
       query.toLowerCase().replace(/\.[^/.]+$/, ''),
@@ -72,7 +77,6 @@ async function searchTMDBMovie(query: string) {
         const tmdbId = MANUAL_MAPPING[trimmed];
         console.log('Found manual mapping for:', trimmed, '-> TMDb ID:', tmdbId);
         
-        // Buscar dados completos do filme usando o ID
         const movieRes = await fetch(`${config.tmdb.baseUrl}/movie/${tmdbId}?api_key=${tmdbApiKey}&language=pt-BR`, {
           next: { revalidate: 3600 }
         });
@@ -83,22 +87,6 @@ async function searchTMDBMovie(query: string) {
           return movieData;
         }
       }
-    }
-    
-    console.log('No manual mapping found for:', query);
-    
-    // Função melhorada de limpeza de nome com remoção de acentos
-    function cleanFileName(filename: string): string {
-      return filename
-        .replace(/\.[^/.]+$/, '') // Remover extensão
-        .replace(/\d{4}/g, '') // Remover anos de 4 dígitos
-        .replace(/\[.*?\]/g, '') // Remover conteúdo entre colchetes
-        .replace(/\(.*?\)/g, '') // Remover conteúdo entre parênteses
-        .replace(/[._-]/g, ' ') // Substituir separadores por espaço
-        .replace(/\s+/g, ' ') // Remover espaços extras
-        .normalize('NFD') // Normalizar caracteres acentuados
-        .replace(/[\u0300-\u036f]/g, '') // Remover acentos
-        .trim();
     }
     
     // Primeira tentativa: limpeza completa sem acentos

@@ -3,23 +3,14 @@ import MovieClient from "@/components/MovieClient";
 import VideoPlayer from "@/components/VideoPlayer";
 import { config } from "@/lib/config";
 
-// Mapeamento manual para filmes que dão problema na busca automática
+// Mapeamento manual para filmes que dão problema na busca automática (backup)
 const MANUAL_MAPPING: Record<string, number> = {
   'gigantes de aço': 39254,
   'gigantes de aco': 39254,
-  'gigantes de aço 2011': 39254,
-  'gigantes de aco 2011': 39254,
-  'gigantes de aço 2011.mkv': 39254,
-  'gigantes de aço 2011.mkv.mp4': 39254,
   'quarteto fantastico': 617126,
   'quarteto fantastico primeiros passos': 617126,
-  'quarteto fantastico primeiros passos 2025': 617126,
-  'quarteto fantastico primeiros passos 2025.mkv': 617126,
-  'quarteto fantastico primeiros passos 2025.mkv.mp4': 617126,
   'a ultima casa': 1284041,
   'ultima casa': 1284041,
-  'a ultima casa 2026': 1284041,
-  'a ultima casa 2026.mp4': 1284041,
 };
 
 interface MovieData {
@@ -116,7 +107,7 @@ async function searchTMDBMovie(query: string): Promise<any | null> {
     // Função melhorada de limpeza de nome com remoção de acentos
     function cleanFileName(filename: string): string {
       return filename
-        .replace(/\.[^/.]+$/, '') // Remover extensão
+        .split('.')[0] // Remover extensão (tudo após o primeiro ponto)
         .replace(/\d{4}/g, '') // Remover anos de 4 dígitos
         .replace(/\[.*?\]/g, '') // Remover conteúdo entre colchetes
         .replace(/\(.*?\)/g, '') // Remover conteúdo entre parênteses
