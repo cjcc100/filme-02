@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import HeroCarousel from "../components/HeroCarousel";
+import { config } from "@/lib/config";
 
 // CJCCHUB - Plataforma de Streaming
 // Autor: juniorclaudinei350-sketch
@@ -8,14 +9,14 @@ import HeroCarousel from "../components/HeroCarousel";
 
 async function getStreamtapeFiles() {
   try {
-    const streamtapeLogin = '4db68bae5deec46b3a4b';
-    const streamtapeKey = 'a7azDDb68ACx8dP';
+    const streamtapeLogin = config.streamtape.login;
+    const streamtapeKey = config.streamtape.key;
     
-    const res = await fetch(`https://api.streamtape.com/file/listfolder?login=${streamtapeLogin}&key=${streamtapeKey}`, {
+    const res = await fetch(`${config.streamtape.apiUrl}/file/listfolder?login=${streamtapeLogin}&key=${streamtapeKey}`, {
       headers: {
         'Accept': 'application/json',
       },
-      next: { revalidate: 0 } // Sem cache por enquanto para testar
+      next: { revalidate: 300 } // Cache de 5 minutos para pegar novos uploads
     });
     if (!res.ok) return null;
     
@@ -32,20 +33,30 @@ async function getStreamtapeFiles() {
 
 async function searchTMDBMovie(query: string) {
   try {
-    const tmdbApiKey = '07c1396db17afadc024cbb5f0c3701c2';
+    const tmdbApiKey = config.tmdb.apiKey;
     
-    // Primeira tentativa: limpeza minimalista
-    let cleanQuery = query
-      .replace(/\.[^/.]+$/, '') // Apenas remover extensão
-      .replace(/[._-]/g, ' ') // Substituir separadores por espaço
-      .replace(/\s+/g, ' ') // Remover espaços extras
-      .trim();
+    // Função melhorada de limpeza de nome com remoção de acentos
+    function cleanFileName(filename: string): string {
+      return filename
+        .replace(/\.[^/.]+$/, '') // Remover extensão
+        .replace(/\d{4}/g, '') // Remover anos de 4 dígitos
+        .replace(/\[.*?\]/g, '') // Remover conteúdo entre colchetes
+        .replace(/\(.*?\)/g, '') // Remover conteúdo entre parênteses
+        .replace(/[._-]/g, ' ') // Substituir separadores por espaço
+        .replace(/\s+/g, ' ') // Remover espaços extras
+        .normalize('NFD') // Normalizar caracteres acentuados
+        .replace(/[\u0300-\u036f]/g, '') // Remover acentos
+        .trim();
+    }
+    
+    // Primeira tentativa: limpeza completa sem acentos
+    let cleanQuery = cleanFileName(query);
     
     if (cleanQuery.length < 3) return null;
     
     console.log('Searching TMDb (attempt 1):', cleanQuery);
     
-    let searchRes = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanQuery)}`, {
+    let searchRes = await fetch(`${config.tmdb.baseUrl}/search/movie?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanQuery)}`, {
       next: { revalidate: 600 }
     });
     
@@ -57,10 +68,9 @@ async function searchTMDBMovie(query: string) {
       }
     }
     
-    // Segunda tentativa: remover anos e números
+    // Segunda tentativa: busca mais permissiva com acentos originais
     cleanQuery = query
       .replace(/\.[^/.]+$/, '')
-      .replace(/\d{4}/g, '') // Remover anos de 4 dígitos
       .replace(/[._-]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
@@ -69,7 +79,7 @@ async function searchTMDBMovie(query: string) {
     
     console.log('Searching TMDb (attempt 2):', cleanQuery);
     
-    searchRes = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanQuery)}`, {
+    searchRes = await fetch(`${config.tmdb.baseUrl}/search/movie?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanQuery)}`, {
       next: { revalidate: 600 }
     });
     
@@ -78,6 +88,54 @@ async function searchTMDBMovie(query: string) {
       if (searchData.results && searchData.results.length > 0) {
         console.log('TMDb found (attempt 2):', searchData.results[0].title);
         return searchData.results[0];
+      }
+    }
+    
+    // Terceira tentativa: apenas primeiras palavras principais sem acentos
+    const words = query.split(/[._-]/).filter(w => w.length > 2);
+    if (words.length >= 2) {
+      cleanQuery = words.slice(0, 3).join(' ')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
+      
+      console.log('Searching TMDb (attempt 3):', cleanQuery);
+      
+      searchRes = await fetch(`${config.tmdb.baseUrl}/search/movie?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanQuery)}`, {
+        next: { revalidate: 600 }
+      });
+      
+      if (searchRes.ok) {
+        const searchData = await searchRes.json();
+        if (searchData.results && searchData.results.length > 0) {
+          console.log('TMDb found (attempt 3):', searchData.results[0].title);
+          return searchData.results[0];
+        }
+      }
+    }
+    
+    // Quarta tentativa: remover palavras comuns como "Primeiros Passos"
+    const cleanQueryExtra = cleanFileName(query)
+      .replace(/primeiros passos/gi, '')
+      .replace(/passos/gi, '')
+      .replace(/o a/gi, '')
+      .replace(/a o/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    if (cleanQueryExtra.length >= 3 && cleanQueryExtra !== cleanFileName(query)) {
+      console.log('Searching TMDb (attempt 4):', cleanQueryExtra);
+      
+      searchRes = await fetch(`${config.tmdb.baseUrl}/search/movie?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanQueryExtra)}`, {
+        next: { revalidate: 600 }
+      });
+      
+      if (searchRes.ok) {
+        const searchData = await searchRes.json();
+        if (searchData.results && searchData.results.length > 0) {
+          console.log('TMDb found (attempt 4):', searchData.results[0].title);
+          return searchData.results[0];
+        }
       }
     }
     
@@ -160,7 +218,8 @@ export default async function Home() {
               const rating = tmdbData?.vote_average?.toFixed(1) || movie.vote_average?.toFixed(1) || 'N/A';
               const description = tmdbData?.overview || movie.description || movie.overview || 'Filme disponível para assistir';
 
-              const movieLink = movie.linkid ? `/movie/${movie.linkid}` : (tmdbData?.id ? `/movie/${tmdbData.id}` : '#');
+              // Priorizar ID do TMDb quando disponível, senão usar linkid do Streamtape
+              const movieLink = tmdbData?.id ? `/movie/${tmdbData.id}` : (movie.linkid ? `/movie/${movie.linkid}` : '#');
 
               return (
                 <Link

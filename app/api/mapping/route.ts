@@ -24,7 +24,7 @@ export async function GET() {
     
     const files = streamtapeData.result.files || [];
 
-    // Função melhorada para limpar nome do arquivo
+    // Função melhorada para limpar nome do arquivo com remoção de acentos
     function cleanFileName(filename: string): string {
       return filename
         .replace(/\.[^/.]+$/, '') // Remover extensão
@@ -33,6 +33,8 @@ export async function GET() {
         .replace(/\(.*?\)/g, '') // Remover conteúdo entre parênteses
         .replace(/[._-]/g, ' ') // Substituir separadores por espaço
         .replace(/\s+/g, ' ') // Remover espaços extras
+        .normalize('NFD') // Normalizar caracteres acentuados
+        .replace(/[\u0300-\u036f]/g, '') // Remover acentos
         .trim()
         .toLowerCase();
     }

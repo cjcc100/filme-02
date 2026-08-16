@@ -61,7 +61,7 @@ async function searchTMDBMovie(query: string): Promise<any | null> {
   try {
     const tmdbApiKey = config.tmdb.apiKey;
     
-    // Função melhorada de limpeza de nome
+    // Função melhorada de limpeza de nome com remoção de acentos
     function cleanFileName(filename: string): string {
       return filename
         .replace(/\.[^/.]+$/, '') // Remover extensão
@@ -70,10 +70,12 @@ async function searchTMDBMovie(query: string): Promise<any | null> {
         .replace(/\(.*?\)/g, '') // Remover conteúdo entre parênteses
         .replace(/[._-]/g, ' ') // Substituir separadores por espaço
         .replace(/\s+/g, ' ') // Remover espaços extras
+        .normalize('NFD') // Normalizar caracteres acentuados
+        .replace(/[\u0300-\u036f]/g, '') // Remover acentos
         .trim();
     }
     
-    // Primeira tentativa: limpeza completa
+    // Primeira tentativa: limpeza completa sem acentos
     let cleanQuery = cleanFileName(query);
     
     if (cleanQuery.length < 3) return null;
@@ -92,7 +94,7 @@ async function searchTMDBMovie(query: string): Promise<any | null> {
       }
     }
     
-    // Segunda tentativa: busca mais permissiva (apenas extensão)
+    // Segunda tentativa: busca mais permissiva com acentos originais
     cleanQuery = query
       .replace(/\.[^/.]+$/, '')
       .replace(/[._-]/g, ' ')
@@ -115,10 +117,13 @@ async function searchTMDBMovie(query: string): Promise<any | null> {
       }
     }
     
-    // Terceira tentativa: apenas primeiras palavras principais
+    // Terceira tentativa: apenas primeiras palavras principais sem acentos
     const words = query.split(/[._-]/).filter(w => w.length > 2);
     if (words.length >= 2) {
-      cleanQuery = words.slice(0, 3).join(' ');
+      cleanQuery = words.slice(0, 3).join(' ')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
       
       console.log('Searching TMDb (attempt 3):', cleanQuery);
       
@@ -130,6 +135,31 @@ async function searchTMDBMovie(query: string): Promise<any | null> {
         const searchData = await searchRes.json();
         if (searchData.results && searchData.results.length > 0) {
           console.log('TMDb found (attempt 3):', searchData.results[0].title);
+          return searchData.results[0];
+        }
+      }
+    }
+    
+    // Quarta tentativa: remover palavras comuns como "Primeiros Passos"
+    const cleanQueryExtra = cleanFileName(query)
+      .replace(/primeiros passos/gi, '')
+      .replace(/passos/gi, '')
+      .replace(/o a/gi, '')
+      .replace(/a o/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    if (cleanQueryExtra.length >= 3 && cleanQueryExtra !== cleanFileName(query)) {
+      console.log('Searching TMDb (attempt 4):', cleanQueryExtra);
+      
+      searchRes = await fetch(`${config.tmdb.baseUrl}/search/movie?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanQueryExtra)}`, {
+        next: { revalidate: 600 }
+      });
+      
+      if (searchRes.ok) {
+        const searchData = await searchRes.json();
+        if (searchData.results && searchData.results.length > 0) {
+          console.log('TMDb found (attempt 4):', searchData.results[0].title);
           return searchData.results[0];
         }
       }
@@ -167,7 +197,7 @@ async function getStreamtapeFileId(movieTitle: string): Promise<string | null> {
       return null;
     }
     
-    // Função de normalização de texto para matching
+    // Função de normalização de texto para matching com remoção de acentos
     function normalizeText(text: string): string {
       return text
         .toLowerCase()
@@ -176,6 +206,8 @@ async function getStreamtapeFileId(movieTitle: string): Promise<string | null> {
         .replace(/\d{4}/g, '') // Remover anos
         .replace(/\[.*?\]/g, '') // Remover colchetes
         .replace(/\(.*?\)/g, '') // Remover parênteses
+        .normalize('NFD') // Normalizar caracteres acentuados
+        .replace(/[\u0300-\u036f]/g, '') // Remover acentos
         .trim();
     }
     
