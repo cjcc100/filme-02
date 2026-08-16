@@ -1,6 +1,7 @@
 import Link from "next/link";
 import MovieClient from "@/components/MovieClient";
 import VideoPlayer from "@/components/VideoPlayer";
+import { config } from "@/lib/config";
 
 interface MovieData {
   id: number;
@@ -38,9 +39,9 @@ interface MovieData {
 
 async function getMovieData(movieId: string): Promise<MovieData | null> {
   try {
-    const tmdbApiKey = '07c1396db17afadc024cbb5f0c3701c2';
+    const tmdbApiKey = config.tmdb.apiKey;
     
-    const res = await fetch(`https://api.themoviedb.org/3/movie/${movieId}?api_key=${tmdbApiKey}&language=pt-BR`, {
+    const res = await fetch(`${config.tmdb.baseUrl}/movie/${movieId}?api_key=${tmdbApiKey}&language=pt-BR`, {
       next: { revalidate: 3600 }
     });
     
@@ -58,20 +59,28 @@ async function getMovieData(movieId: string): Promise<MovieData | null> {
 
 async function searchTMDBMovie(query: string): Promise<any | null> {
   try {
-    const tmdbApiKey = '07c1396db17afadc024cbb5f0c3701c2';
+    const tmdbApiKey = config.tmdb.apiKey;
     
-    // Primeira tentativa: limpeza minimalista
-    let cleanQuery = query
-      .replace(/\.[^/.]+$/, '') // Apenas remover extensão
-      .replace(/[._-]/g, ' ') // Substituir separadores por espaço
-      .replace(/\s+/g, ' ') // Remover espaços extras
-      .trim();
+    // Função melhorada de limpeza de nome
+    function cleanFileName(filename: string): string {
+      return filename
+        .replace(/\.[^/.]+$/, '') // Remover extensão
+        .replace(/\d{4}/g, '') // Remover anos de 4 dígitos
+        .replace(/\[.*?\]/g, '') // Remover conteúdo entre colchetes
+        .replace(/\(.*?\)/g, '') // Remover conteúdo entre parênteses
+        .replace(/[._-]/g, ' ') // Substituir separadores por espaço
+        .replace(/\s+/g, ' ') // Remover espaços extras
+        .trim();
+    }
+    
+    // Primeira tentativa: limpeza completa
+    let cleanQuery = cleanFileName(query);
     
     if (cleanQuery.length < 3) return null;
     
     console.log('Searching TMDb (attempt 1):', cleanQuery);
     
-    let searchRes = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanQuery)}`, {
+    let searchRes = await fetch(`${config.tmdb.baseUrl}/search/movie?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanQuery)}`, {
       next: { revalidate: 600 }
     });
     
@@ -83,10 +92,9 @@ async function searchTMDBMovie(query: string): Promise<any | null> {
       }
     }
     
-    // Segunda tentativa: remover anos e números
+    // Segunda tentativa: busca mais permissiva (apenas extensão)
     cleanQuery = query
       .replace(/\.[^/.]+$/, '')
-      .replace(/\d{4}/g, '') // Remover anos de 4 dígitos
       .replace(/[._-]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
@@ -95,7 +103,7 @@ async function searchTMDBMovie(query: string): Promise<any | null> {
     
     console.log('Searching TMDb (attempt 2):', cleanQuery);
     
-    searchRes = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanQuery)}`, {
+    searchRes = await fetch(`${config.tmdb.baseUrl}/search/movie?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanQuery)}`, {
       next: { revalidate: 600 }
     });
     
@@ -104,6 +112,26 @@ async function searchTMDBMovie(query: string): Promise<any | null> {
       if (searchData.results && searchData.results.length > 0) {
         console.log('TMDb found (attempt 2):', searchData.results[0].title);
         return searchData.results[0];
+      }
+    }
+    
+    // Terceira tentativa: apenas primeiras palavras principais
+    const words = query.split(/[._-]/).filter(w => w.length > 2);
+    if (words.length >= 2) {
+      cleanQuery = words.slice(0, 3).join(' ');
+      
+      console.log('Searching TMDb (attempt 3):', cleanQuery);
+      
+      searchRes = await fetch(`${config.tmdb.baseUrl}/search/movie?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanQuery)}`, {
+        next: { revalidate: 600 }
+      });
+      
+      if (searchRes.ok) {
+        const searchData = await searchRes.json();
+        if (searchData.results && searchData.results.length > 0) {
+          console.log('TMDb found (attempt 3):', searchData.results[0].title);
+          return searchData.results[0];
+        }
       }
     }
     
@@ -117,14 +145,14 @@ async function searchTMDBMovie(query: string): Promise<any | null> {
 
 async function getStreamtapeFileId(movieTitle: string): Promise<string | null> {
   try {
-    const streamtapeLogin = '4db68bae5deec46b3a4b';
-    const streamtapeKey = 'a7azDDb68ACx8dP';
+    const streamtapeLogin = config.streamtape.login;
+    const streamtapeKey = config.streamtape.key;
     
-    const res = await fetch(`https://api.streamtape.com/file/listfolder?login=${streamtapeLogin}&key=${streamtapeKey}`, {
+    const res = await fetch(`${config.streamtape.apiUrl}/file/listfolder?login=${streamtapeLogin}&key=${streamtapeKey}`, {
       headers: {
         'Accept': 'application/json',
       },
-      next: { revalidate: 1800 }
+      next: { revalidate: 300 } // Reduzido para 5 minutos para pegar novos uploads mais rápido
     });
     
     if (!res.ok) {
@@ -139,14 +167,63 @@ async function getStreamtapeFileId(movieTitle: string): Promise<string | null> {
       return null;
     }
     
-    // Buscar arquivo correspondente pelo título
-    const file = data.result.files.find((f: any) => {
-      const fileName = (f.name || '').toLowerCase();
-      const searchTerm = movieTitle.toLowerCase();
-      return fileName.includes(searchTerm) || searchTerm.includes(fileName);
-    });
+    // Função de normalização de texto para matching
+    function normalizeText(text: string): string {
+      return text
+        .toLowerCase()
+        .replace(/[._-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/\d{4}/g, '') // Remover anos
+        .replace(/\[.*?\]/g, '') // Remover colchetes
+        .replace(/\(.*?\)/g, '') // Remover parênteses
+        .trim();
+    }
     
-    return file?.linkid || null;
+    const normalizedTitle = normalizeText(movieTitle);
+    const titleWords = normalizedTitle.split(' ').filter(w => w.length > 2);
+    
+    // Buscar arquivo correspondente pelo título com matching melhorado
+    let bestMatch: any = null;
+    let bestMatchScore = 0;
+    
+    for (const file of data.result.files) {
+      const fileName = file.name || '';
+      const normalizedFileName = normalizeText(fileName);
+      
+      // Matching exato
+      if (normalizedFileName === normalizedTitle) {
+        console.log('Exact match found:', fileName);
+        return file.linkid;
+      }
+      
+      // Matching por palavras-chave
+      const fileWords = normalizedFileName.split(' ').filter(w => w.length > 2);
+      let matchScore = 0;
+      
+      for (const titleWord of titleWords) {
+        if (fileWords.some(fw => fw.includes(titleWord) || titleWord.includes(fw))) {
+          matchScore++;
+        }
+      }
+      
+      // Matching por inclusão
+      if (normalizedFileName.includes(normalizedTitle) || normalizedTitle.includes(normalizedFileName)) {
+        matchScore += 2;
+      }
+      
+      if (matchScore > bestMatchScore) {
+        bestMatch = file;
+        bestMatchScore = matchScore;
+      }
+    }
+    
+    if (bestMatch && bestMatchScore >= 2) {
+      console.log('Best match found:', bestMatch.name, 'with score:', bestMatchScore);
+      return bestMatch.linkid;
+    }
+    
+    console.log('No suitable match found for:', movieTitle);
+    return null;
   } catch (error) {
     console.error('Error fetching Streamtape file ID:', error);
     return null;
@@ -177,14 +254,14 @@ export default async function MoviePage({ params }: { params: Promise<{ id: stri
     finalFileId = streamtapeFileId;
   } else {
     // Se for file ID do Streamtape, tentar buscar dados do TMDb pelo nome do arquivo
-    const streamtapeLogin = '4db68bae5deec46b3a4b';
-    const streamtapeKey = 'a7azDDb68ACx8dP';
+    const streamtapeLogin = config.streamtape.login;
+    const streamtapeKey = config.streamtape.key;
     
-    const res = await fetch(`https://api.streamtape.com/file/info?login=${streamtapeLogin}&key=${streamtapeKey}&file=${movieId}`, {
+    const res = await fetch(`${config.streamtape.apiUrl}/file/info?login=${streamtapeLogin}&key=${streamtapeKey}&file=${movieId}`, {
       headers: {
         'Accept': 'application/json',
       },
-      next: { revalidate: 1800 }
+      next: { revalidate: 300 }
     });
     
     if (res.ok) {

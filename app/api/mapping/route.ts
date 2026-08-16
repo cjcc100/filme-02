@@ -1,10 +1,12 @@
+import { config } from '@/lib/config';
+
 export async function GET() {
   try {
     // Buscar arquivos do Streamtape
-    const streamtapeLogin = '4db68bae5deec46b3a4b';
-    const streamtapeKey = 'a7azDDb68ACx8dP';
+    const streamtapeLogin = config.streamtape.login;
+    const streamtapeKey = config.streamtape.key;
     
-    const streamtapeRes = await fetch(`https://api.streamtape.com/file/listfolder?login=${streamtapeLogin}&key=${streamtapeKey}&folder=`, {
+    const streamtapeRes = await fetch(`${config.streamtape.apiUrl}/file/listfolder?login=${streamtapeLogin}&key=${streamtapeKey}&folder=`, {
       headers: {
         'Accept': 'application/json',
       },
@@ -22,11 +24,13 @@ export async function GET() {
     
     const files = streamtapeData.result.files || [];
 
-    // Função para limpar nome do arquivo
+    // Função melhorada para limpar nome do arquivo
     function cleanFileName(filename: string): string {
       return filename
         .replace(/\.[^/.]+$/, '') // Remover extensão
-        .replace(/\d+/g, '') // Remover números
+        .replace(/\d{4}/g, '') // Remover anos de 4 dígitos
+        .replace(/\[.*?\]/g, '') // Remover conteúdo entre colchetes
+        .replace(/\(.*?\)/g, '') // Remover conteúdo entre parênteses
         .replace(/[._-]/g, ' ') // Substituir separadores por espaço
         .replace(/\s+/g, ' ') // Remover espaços extras
         .trim()
@@ -34,7 +38,7 @@ export async function GET() {
     }
 
     // Buscar no TMDb para cada arquivo
-    const tmdbApiKey = '07c1396db17afadc024cbb5f0c3701c2';
+    const tmdbApiKey = config.tmdb.apiKey;
     const mapping: Record<string, string> = {};
 
     for (const file of files) {
@@ -47,7 +51,7 @@ export async function GET() {
       try {
         // Buscar no TMDb
         const searchRes = await fetch(
-          `https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanName)}`
+          `${config.tmdb.baseUrl}/search/movie?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanName)}`
         );
 
         if (searchRes.ok) {
