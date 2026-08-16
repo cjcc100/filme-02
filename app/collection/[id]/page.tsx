@@ -106,6 +106,46 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
   if (mapping) {
     // Usar mapeamento manual se existir
     tmdbData = await getTMDBSeriesData(mapping.seriesId, mapping.seasonNumber);
+    
+    // Se não tiver dados da temporada específica, tentar buscar todas as temporadas
+    if (!tmdbData?.season || tmdbData.season.episodes.length === 0) {
+      console.log('No episodes in season', mapping.seasonNumber, 'trying to find available seasons...');
+      
+      try {
+        const tmdbApiKey = '07c1396db17afadc024cbb5f0c3701c2';
+        const seriesRes = await fetch(`https://api.themoviedb.org/3/tv/${mapping.seriesId}?api_key=${tmdbApiKey}&language=pt-BR`, {
+          next: { revalidate: 3600 }
+        });
+        
+        if (seriesRes.ok) {
+          const seriesFullData = await seriesRes.json();
+          const totalSeasons = seriesFullData.number_of_seasons || 1;
+          
+          console.log('Total seasons:', totalSeasons);
+          
+          // Tentar cada temporada até encontrar uma com episódios
+          for (let s = 1; s <= totalSeasons; s++) {
+            const seasonRes = await fetch(`https://api.themoviedb.org/3/tv/${mapping.seriesId}/season/${s}?api_key=${tmdbApiKey}&language=pt-BR`, {
+              next: { revalidate: 3600 }
+            });
+            
+            if (seasonRes.ok) {
+              const seasonData = await seasonRes.json();
+              if (seasonData.episodes && seasonData.episodes.length > 0) {
+                console.log('Found episodes in season', s);
+                tmdbData = {
+                  series: seriesFullData,
+                  season: seasonData
+                };
+                break;
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error trying alternative seasons:', error);
+      }
+    }
   } else {
     // Tentar busca automática pelo nome da pasta
     const folderName = folderData?.folders?.[0]?.name || '';
@@ -138,15 +178,35 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
       const episodeNumber = tmdbEpisode.episode_number;
       const seasonNumber = tmdbEpisode.season_number;
       
-      // Tentar encontrar arquivo pelo número do episódio
+      // Tentar encontrar arquivo pelo número do episódio (mais flexível)
       const matchingFile = episodes.find((file: any) => {
-        const fileName = file.name || '';
-        const match = fileName.match(/(\d+)x(\d+)/i);
-        if (match) {
-          const fileSeason = parseInt(match[1]);
-          const fileEpisode = parseInt(match[2]);
+        const fileName = (file.name || '').toLowerCase();
+        
+        // Match 1: Formato "SxE" ou "x" (ex: "2x04", "2x04.mp4", "S02E04")
+        const match1 = fileName.match(/(\d+)[xXeE](\d+)/);
+        if (match1) {
+          const fileSeason = parseInt(match1[1]);
+          const fileEpisode = parseInt(match1[2]);
           return fileSeason === seasonNumber && fileEpisode === episodeNumber;
         }
+        
+        // Match 2: Formato "S02E04" 
+        const match2 = fileName.match(/s(\d+)e(\d+)/i);
+        if (match2) {
+          const fileSeason = parseInt(match2[1]);
+          const fileEpisode = parseInt(match2[2]);
+          return fileSeason === seasonNumber && fileEpisode === episodeNumber;
+        }
+        
+        // Match 3: Apenas o número do episódio se for temporada 1
+        if (seasonNumber === 1) {
+          const match3 = fileName.match(/(\d+)/);
+          if (match3) {
+            const fileEpisode = parseInt(match3[1]);
+            return fileEpisode === episodeNumber;
+          }
+        }
+        
         return false;
       });
       
