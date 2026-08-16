@@ -7,15 +7,18 @@ import VideoPlayer from './VideoPlayer';
 
 interface MovieData {
   id: number;
-  title: string;
-  original_title: string;
+  title?: string;
+  name?: string; // Para séries
+  original_title?: string;
+  original_name?: string; // Para séries
   overview: string;
   poster_path: string;
   backdrop_path: string;
-  release_date: string;
+  release_date?: string;
+  first_air_date?: string; // Para séries
   vote_average: number;
   vote_count: number;
-  genres: Array<{
+  genres?: Array<{
     id: number;
     name: string;
   }>;
@@ -49,12 +52,15 @@ export default function MovieClient({ movieData, fileId }: MovieClientProps) {
 
   if (!movieData) return null;
 
-  const title = movieData.title || movieData.original_title;
-  const year = movieData.release_date?.split('-')[0] || 'N/A';
+  const title = movieData.title || movieData.name || movieData.original_title || movieData.original_name || 'Sem título';
+  const year = movieData.release_date?.split('-')[0] || movieData.first_air_date?.split('-')[0] || 'N/A';
   const rating = movieData.vote_average?.toFixed(1) || 'N/A';
   const duration = movieData.runtime ? `${Math.floor(movieData.runtime / 60)}h ${movieData.runtime % 60}m` : 'N/A';
   const genres = movieData.genres?.map(g => g.name).join(', ') || 'N/A';
   const voteCount = movieData.vote_count?.toLocaleString() || '0';
+  
+  // Verificar se é série (tem name) ou filme (tem title)
+  const isTV = !!movieData.name;
   
   const backdropUrl = movieData.backdrop_path
     ? `https://image.tmdb.org/t/p/original${movieData.backdrop_path}`
@@ -139,6 +145,12 @@ export default function MovieClient({ movieData, fileId }: MovieClientProps) {
                   )}
                   
                   <div className="flex flex-wrap items-center gap-4 mb-6">
+                    {isTV && (
+                      <div className="bg-purple-600 text-white text-xs px-2 py-1 rounded">
+                        Série
+                      </div>
+                    )}
+                    
                     <div className="flex items-center gap-2">
                       <span className="text-green-400 font-bold">{rating}</span>
                       <span className="text-zinc-400">Avaliação</span>
@@ -148,9 +160,12 @@ export default function MovieClient({ movieData, fileId }: MovieClientProps) {
                     
                     <span className="text-zinc-300">{year}</span>
                     
-                    <span className="text-zinc-400">•</span>
-                    
-                    <span className="text-zinc-300">{duration}</span>
+                    {duration !== 'N/A' && (
+                      <>
+                        <span className="text-zinc-400">•</span>
+                        <span className="text-zinc-300">{duration}</span>
+                      </>
+                    )}
                     
                     <span className="text-zinc-400">•</span>
                     

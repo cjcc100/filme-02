@@ -11,19 +11,23 @@ const MANUAL_MAPPING: Record<string, number> = {
   'quarteto fantastico primeiros passos': 617126,
   'a ultima casa': 1284041,
   'ultima casa': 1284041,
+  'avenida brasil': 45815,
 };
 
 interface MovieData {
   id: number;
-  title: string;
-  original_title: string;
+  title?: string;
+  name?: string; // Para séries
+  original_title?: string;
+  original_name?: string; // Para séries
   overview: string;
   poster_path: string;
   backdrop_path: string;
-  release_date: string;
+  release_date?: string;
+  first_air_date?: string; // Para séries
   vote_average: number;
   vote_count: number;
-  genres: Array<{
+  genres?: Array<{
     id: number;
     name: string;
   }>;
@@ -47,11 +51,12 @@ interface MovieData {
   }>;
 }
 
-async function getMovieData(movieId: string): Promise<MovieData | null> {
+async function getMovieData(movieId: string, isTV: boolean = false): Promise<MovieData | null> {
   try {
     const tmdbApiKey = config.tmdb.apiKey;
     
-    const res = await fetch(`${config.tmdb.baseUrl}/movie/${movieId}?api_key=${tmdbApiKey}&language=pt-BR`, {
+    const endpoint = isTV ? 'tv' : 'movie';
+    const res = await fetch(`${config.tmdb.baseUrl}/${endpoint}/${movieId}?api_key=${tmdbApiKey}&language=pt-BR`, {
       next: { revalidate: 3600 }
     });
     
@@ -63,6 +68,31 @@ async function getMovieData(movieId: string): Promise<MovieData | null> {
     return res.json();
   } catch (error) {
     console.error('Error fetching movie data:', error);
+    return null;
+  }
+}
+
+async function searchTMDBTV(query: string): Promise<any | null> {
+  try {
+    const tmdbApiKey = config.tmdb.apiKey;
+    
+    console.log('Searching TMDb TV for:', query);
+    
+    const searchRes = await fetch(`${config.tmdb.baseUrl}/search/tv?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(query)}`, {
+      next: { revalidate: 600 }
+    });
+    
+    if (searchRes.ok) {
+      const searchData = await searchRes.json();
+      if (searchData.results && searchData.results.length > 0) {
+        console.log('TMDb TV found:', searchData.results[0].name);
+        return searchData.results[0];
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error searching TMDb TV:', error);
     return null;
   }
 }
@@ -217,6 +247,15 @@ async function searchTMDBMovie(query: string): Promise<any | null> {
     }
     
     console.log('TMDb no results for:', query);
+    
+    // Tentar buscar como série se não encontrou como filme
+    console.log('Trying TV search...');
+    const tvResult = await searchTMDBTV(cleanQuery);
+    if (tvResult) {
+      console.log('Found as TV series:', tvResult.name);
+      return tvResult;
+    }
+    
     return null;
   } catch (error) {
     console.error('Error searching TMDb:', error);
@@ -328,11 +367,16 @@ export default async function MoviePage({ params }: { params: Promise<{ id: stri
   let fileName: string = '';
   
   if (isTmdbId) {
-    // Se for ID do TMDb, buscar dados do filme
-    movieData = await getMovieData(movieId);
+    // Se for ID do TMDb, tentar buscar como filme primeiro
+    movieData = await getMovieData(movieId, false);
     
-    // Buscar file ID do Streamtape baseado no título do filme
-    const movieTitle = movieData?.title || movieData?.original_title || '';
+    // Se não encontrar como filme, tentar como série
+    if (!movieData) {
+      movieData = await getMovieData(movieId, true);
+    }
+    
+    // Buscar file ID do Streamtape baseado no título do filme/série
+    const movieTitle = movieData?.title || movieData?.name || movieData?.original_title || movieData?.original_name || '';
     const streamtapeFileId = await getStreamtapeFileId(movieTitle);
     finalFileId = streamtapeFileId;
   } else {
@@ -355,7 +399,9 @@ export default async function MoviePage({ params }: { params: Promise<{ id: stri
         fileName = fileData.name || '';
         const tmdbData = await searchTMDBMovie(fileName);
         if (tmdbData) {
-          movieData = await getMovieData(tmdbData.id.toString());
+          // Verificar se é série (tem name) ou filme (tem title)
+          const isTV = !!tmdbData.name;
+          movieData = await getMovieData(tmdbData.id.toString(), isTV);
         }
       }
     }

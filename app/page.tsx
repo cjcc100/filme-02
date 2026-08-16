@@ -39,7 +39,33 @@ const MANUAL_MAPPING: Record<string, number> = {
   'quarteto fantastico primeiros passos': 617126,
   'a ultima casa': 1284041,
   'ultima casa': 1284041,
+  'avenida brasil': 45815,
 };
+
+async function searchTMDBTV(query: string) {
+  try {
+    const tmdbApiKey = config.tmdb.apiKey;
+    
+    console.log('Searching TMDb TV for:', query);
+    
+    const searchRes = await fetch(`${config.tmdb.baseUrl}/search/tv?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(query)}`, {
+      next: { revalidate: 600 }
+    });
+    
+    if (searchRes.ok) {
+      const searchData = await searchRes.json();
+      if (searchData.results && searchData.results.length > 0) {
+        console.log('TMDb TV found:', searchData.results[0].name);
+        return searchData.results[0];
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error searching TMDb TV:', error);
+    return null;
+  }
+}
 
 async function searchTMDBMovie(query: string) {
   try {
@@ -188,6 +214,15 @@ async function searchTMDBMovie(query: string) {
     }
     
     console.log('TMDb no results for:', query);
+    
+    // Tentar buscar como série se não encontrou como filme
+    console.log('Trying TV search...');
+    const tvResult = await searchTMDBTV(cleanQuery);
+    if (tvResult) {
+      console.log('Found as TV series:', tvResult.name);
+      return tvResult;
+    }
+    
     return null;
   } catch (error) {
     console.error('Error searching TMDb:', error);
@@ -207,12 +242,12 @@ export default async function Home() {
       const fileName = file.name || '';
       console.log('Processing file:', fileName);
       const tmdbData = fileName ? await searchTMDBMovie(fileName) : null;
-      console.log('TMDb result for', fileName, ':', tmdbData ? `FOUND (ID: ${tmdbData.id})` : 'NOT FOUND');
+      console.log('TMDb result for', fileName, ':', tmdbData ? `FOUND (ID: ${tmdbData.id}, Type: ${tmdbData.title ? 'Movie' : 'TV'})` : 'NOT FOUND');
       
       return {
         ...file,
         tmdbData,
-        title: tmdbData?.title || file.name || 'Sem título',
+        title: tmdbData?.title || tmdbData?.name || file.name || 'Sem título',
         description: tmdbData?.overview || 'Sem descrição',
         linkid: file.linkid
       };
@@ -264,9 +299,10 @@ export default async function Home() {
                 : null;
               
               const title = tmdbData?.title || tmdbData?.name || movie.title || movie.name || 'Sem título';
-              const year = tmdbData?.release_date?.split('-')[0] || movie.release_date?.split('-')[0] || movie.year || 'N/A';
+              const year = tmdbData?.release_date?.split('-')[0] || tmdbData?.first_air_date?.split('-')[0] || movie.release_date?.split('-')[0] || movie.year || 'N/A';
               const rating = tmdbData?.vote_average?.toFixed(1) || movie.vote_average?.toFixed(1) || 'N/A';
               const description = tmdbData?.overview || movie.description || movie.overview || 'Filme disponível para assistir';
+              const isTV = !!tmdbData?.name; // Se tiver name, é série
 
               // Priorizar ID do TMDb quando disponível, senão usar linkid do Streamtape
               const movieLink = tmdbData?.id ? `/movie/${tmdbData.id}` : (movie.linkid ? `/movie/${movie.linkid}` : '#');
@@ -291,6 +327,11 @@ export default async function Home() {
                       </div>
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                    {isTV && (
+                      <div className="absolute top-2 left-2 bg-purple-600 text-white text-xs px-2 py-1 rounded">
+                        Série
+                      </div>
+                    )}
                     <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-white text-sm font-bold px-2 py-1 rounded">
                       {rating}
                     </div>
