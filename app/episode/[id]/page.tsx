@@ -101,9 +101,10 @@ const SERIES_MAPPING: Record<string, string> = {
   'avatar': '82452',
 };
 
-export default async function EpisodePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EpisodePage({ params, searchParams }: { params: Promise<{ id: string }>, searchParams: Promise<{ series?: string; seriesId?: string; season?: string; episode?: string }> }) {
   const { id } = await params;
   const fileId = id;
+  const { series, seriesId, season, episode } = await searchParams;
   
   const fileData = await getStreamtapeFileInfo(fileId);
   const fileName = fileData?.name || 'Episódio';
@@ -123,46 +124,88 @@ export default async function EpisodePage({ params }: { params: Promise<{ id: st
   let tmdbEpisodeData = null;
   let seriesName = '';
   
-  // Tentar identificar a série pelo nome do arquivo
-  const fileNameLower = fileName.toLowerCase();
+  console.log('=== EPISODE PAGE DEBUG ===');
+  console.log('File ID:', fileId);
+  console.log('File Name:', fileName);
+  console.log('URL Params - series:', series, 'seriesId:', seriesId, 'season:', season, 'episode:', episode);
+  console.log('Extracted - Season:', seasonNumber, 'Episode:', episodeNumber);
   
-  // Verificar mapeamento manual primeiro
-  for (const [seriesKey, seriesId] of Object.entries(SERIES_MAPPING)) {
-    if (fileNameLower.includes(seriesKey)) {
-      console.log('Found series in manual mapping:', seriesKey, '->', seriesId);
-      tmdbSeriesData = await getTMDBSeriesDetails(seriesId);
-      if (tmdbSeriesData) {
-        seriesName = tmdbSeriesData.name || '';
-        tmdbEpisodeData = await getTMDBEpisodeDetails(seriesId, seasonNumber, episodeNumber);
-      }
-      break;
+  // Prioridade 1: Usar parâmetros da URL se disponíveis
+  if (seriesId && season && episode) {
+    console.log('Using URL parameters...');
+    const urlSeason = parseInt(season);
+    const urlEpisode = parseInt(episode);
+    
+    // Atualizar temporada e episódio com os valores da URL
+    seasonNumber = urlSeason;
+    episodeNumber = urlEpisode;
+    
+    tmdbSeriesData = await getTMDBSeriesDetails(seriesId);
+    if (tmdbSeriesData) {
+      seriesName = tmdbSeriesData.name || series || '';
+      console.log('✓ Got series data from URL:', seriesName);
+      tmdbEpisodeData = await getTMDBEpisodeDetails(seriesId, seasonNumber, episodeNumber);
+      console.log('✓ Episode data from URL:', tmdbEpisodeData ? 'FOUND' : 'NOT FOUND');
     }
   }
   
-  // Se não encontrou no mapeamento manual, tentar busca automática
+  // Prioridade 2: Tentar identificar pelo nome do arquivo se não tem parâmetros
   if (!tmdbSeriesData) {
-    // Extrair possível nome da série do nome do arquivo
-    const possibleSeriesName = fileName
-      .replace(/\d+x\d+/gi, '') // Remover formato de episódio
-      .replace(/\d{4}/g, '') // Remover anos
-      .replace(/Temporada \d+/gi, '') // Remover "Temporada X"
-      .replace(/\[.*?\]/g, '') // Remover colchetes
-      .replace(/\(.*?\)/g, '') // Remover parênteses
-      .replace(/[._-]/g, ' ') // Substituir separadores
-      .replace(/\s+/g, ' ') // Remover espaços extras
-      .trim();
+    console.log('No URL params, trying file name identification...');
+    const fileNameLower = fileName.toLowerCase();
     
-    if (possibleSeriesName.length > 2) {
-      const searchResult = await searchTMDBSeries(possibleSeriesName);
-      if (searchResult) {
-        tmdbSeriesData = await getTMDBSeriesDetails(searchResult.id.toString());
+    // Verificar mapeamento manual primeiro
+    console.log('Checking manual mapping...');
+    for (const [seriesKey, mappingSeriesId] of Object.entries(SERIES_MAPPING)) {
+      if (fileNameLower.includes(seriesKey)) {
+        console.log('✓ Found series in manual mapping:', seriesKey, '->', mappingSeriesId);
+        tmdbSeriesData = await getTMDBSeriesDetails(mappingSeriesId);
         if (tmdbSeriesData) {
           seriesName = tmdbSeriesData.name || '';
-          tmdbEpisodeData = await getTMDBEpisodeDetails(searchResult.id.toString(), seasonNumber, episodeNumber);
+          console.log('✓ Got series data:', seriesName);
+          tmdbEpisodeData = await getTMDBEpisodeDetails(mappingSeriesId, seasonNumber, episodeNumber);
+          console.log('✓ Episode data:', tmdbEpisodeData ? 'FOUND' : 'NOT FOUND');
+        }
+        break;
+      }
+    }
+    
+    // Se não encontrou no mapeamento manual, tentar busca automática
+    if (!tmdbSeriesData) {
+      console.log('Manual mapping failed, trying automatic search...');
+      // Extrair possível nome da série do nome do arquivo
+      const possibleSeriesName = fileName
+        .replace(/\d+x\d+/gi, '') // Remover formato de episódio
+        .replace(/\d{4}/g, '') // Remover anos
+        .replace(/Temporada \d+/gi, '') // Remover "Temporada X"
+        .replace(/\[.*?\]/g, '') // Remover colchetes
+        .replace(/\(.*?\)/g, '') // Remover parênteses
+        .replace(/[._-]/g, ' ') // Substituir separadores
+        .replace(/\s+/g, ' ') // Remover espaços extras
+        .trim();
+      
+      console.log('Possible series name:', possibleSeriesName);
+      
+      if (possibleSeriesName.length > 2) {
+        const searchResult = await searchTMDBSeries(possibleSeriesName);
+        if (searchResult) {
+          console.log('✓ Found series via search:', searchResult.name, 'ID:', searchResult.id);
+          tmdbSeriesData = await getTMDBSeriesDetails(searchResult.id.toString());
+          if (tmdbSeriesData) {
+            seriesName = tmdbSeriesData.name || '';
+            console.log('✓ Got series data:', seriesName);
+            tmdbEpisodeData = await getTMDBEpisodeDetails(searchResult.id.toString(), seasonNumber, episodeNumber);
+            console.log('✓ Episode data:', tmdbEpisodeData ? 'FOUND' : 'NOT FOUND');
+          }
+        } else {
+          console.log('✗ Series search failed');
         }
       }
     }
   }
+  
+  console.log('Final results - Series:', tmdbSeriesData ? 'FOUND' : 'NOT FOUND', 'Episode:', tmdbEpisodeData ? 'FOUND' : 'NOT FOUND');
+  console.log('=========================');
   
   // Dados para exibição
   const episodeTitle = tmdbEpisodeData?.name || fileName;

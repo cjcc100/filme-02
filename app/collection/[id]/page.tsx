@@ -278,7 +278,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
                   className={`group relative bg-zinc-800 rounded-xl overflow-hidden transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-red-500/20 ${!hasVideo ? 'opacity-60' : ''}`}
                 >
                   {hasVideo && linkid ? (
-                    <Link href={`/episode/${linkid}`}>
+                    <Link href={`/episode/${linkid}?series=${encodeURIComponent(seriesData?.name || '')}&seriesId=${seriesData?.id || ''}&season=${seasonNumber}&episode=${episodeNumber}`}>
                       <div className="relative aspect-video overflow-hidden">
                         {thumbnailUrl ? (
                           <Image
