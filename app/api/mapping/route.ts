@@ -1,5 +1,15 @@
 import { config } from '@/lib/config';
 
+// Mapeamento manual para filmes que dão problema na busca automática
+const MANUAL_MAPPING: Record<string, number> = {
+  'gigantes de aço': 39254,
+  'gigantes de aco': 39254,
+  'quarteto fantastico': 617126,
+  'quarteto fantastico primeiros passos': 617126,
+  'a ultima casa': 1284041,
+  'ultima casa': 1284041,
+};
+
 export async function GET() {
   try {
     // Buscar arquivos do Streamtape
@@ -51,18 +61,30 @@ export async function GET() {
       if (cleanName.length < 3) continue;
 
       try {
-        // Buscar no TMDb
-        const searchRes = await fetch(
-          `${config.tmdb.baseUrl}/search/movie?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanName)}`
-        );
+        // Verificar mapeamento manual primeiro
+        const normalizedName = cleanName.toLowerCase();
+        let tmdbId: string | null = null;
+        
+        if (MANUAL_MAPPING[normalizedName]) {
+          tmdbId = MANUAL_MAPPING[normalizedName].toString();
+          console.log(`Using manual mapping for: ${fileName} -> TMDb ID: ${tmdbId}`);
+        } else {
+          // Buscar no TMDb
+          const searchRes = await fetch(
+            `${config.tmdb.baseUrl}/search/movie?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanName)}`
+          );
 
-        if (searchRes.ok) {
-          const searchData = await searchRes.json();
-          if (searchData.results && searchData.results.length > 0) {
-            const tmdbId = searchData.results[0].id.toString();
-            mapping[tmdbId] = file.linkid;
-            console.log(`Mapped: ${fileName} -> TMDb ID: ${tmdbId}, Streamtape File ID: ${file.linkid}`);
+          if (searchRes.ok) {
+            const searchData = await searchRes.json();
+            if (searchData.results && searchData.results.length > 0) {
+              tmdbId = searchData.results[0].id.toString();
+            }
           }
+        }
+        
+        if (tmdbId) {
+          mapping[tmdbId] = file.linkid;
+          console.log(`Mapped: ${fileName} -> TMDb ID: ${tmdbId}, Streamtape File ID: ${file.linkid}`);
         }
       } catch (error) {
         console.error(`Error searching TMDb for ${fileName}:`, error);

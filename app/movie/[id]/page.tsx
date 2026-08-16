@@ -3,6 +3,16 @@ import MovieClient from "@/components/MovieClient";
 import VideoPlayer from "@/components/VideoPlayer";
 import { config } from "@/lib/config";
 
+// Mapeamento manual para filmes que dão problema na busca automática
+const MANUAL_MAPPING: Record<string, number> = {
+  'gigantes de aço': 39254,
+  'gigantes de aco': 39254,
+  'quarteto fantastico': 617126,
+  'quarteto fantastico primeiros passos': 617126,
+  'a ultima casa': 1284041,
+  'ultima casa': 1284041,
+};
+
 interface MovieData {
   id: number;
   title: string;
@@ -62,6 +72,30 @@ async function searchTMDBMovie(query: string): Promise<any | null> {
     const tmdbApiKey = config.tmdb.apiKey;
     
     console.log('Original query:', query);
+    
+    // Verificar mapeamento manual primeiro
+    const normalizedQuery = query.toLowerCase()
+      .replace(/\.[^/.]+$/, '')
+      .replace(/\d{4}/g, '')
+      .replace(/[._-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    if (MANUAL_MAPPING[normalizedQuery]) {
+      const tmdbId = MANUAL_MAPPING[normalizedQuery];
+      console.log('Found manual mapping for:', normalizedQuery, '-> TMDb ID:', tmdbId);
+      
+      // Buscar dados completos do filme usando o ID
+      const movieRes = await fetch(`${config.tmdb.baseUrl}/movie/${tmdbId}?api_key=${tmdbApiKey}&language=pt-BR`, {
+        next: { revalidate: 3600 }
+      });
+      
+      if (movieRes.ok) {
+        const movieData = await movieRes.json();
+        console.log('Retrieved movie data from manual mapping:', movieData.title);
+        return movieData;
+      }
+    }
     
     // Função melhorada de limpeza de nome com remoção de acentos
     function cleanFileName(filename: string): string {
