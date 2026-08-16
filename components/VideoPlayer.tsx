@@ -4,18 +4,23 @@ import { useState, useEffect } from 'react';
 
 interface VideoPlayerProps {
   fileId: string;
-  onClose: () => void;
+  onClose?: () => void;
+  isModal?: boolean;
 }
 
-export default function VideoPlayer({ fileId, onClose }: VideoPlayerProps) {
-  const [isVisible, setIsVisible] = useState(false);
+export default function VideoPlayer({ fileId, onClose, isModal = true }: VideoPlayerProps) {
+  const [isVisible, setIsVisible] = useState(isModal ? false : true);
 
   useEffect(() => {
-    setIsVisible(true);
-  }, []);
+    if (isModal) {
+      setIsVisible(true);
+    }
+  }, [isModal]);
 
-  // Fechar com tecla ESC
+  // Fechar com tecla ESC (apenas no modal)
   useEffect(() => {
+    if (!isModal || !onClose) return;
+
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isVisible) {
         handleClose();
@@ -29,13 +34,39 @@ export default function VideoPlayer({ fileId, onClose }: VideoPlayerProps) {
     return () => {
       document.removeEventListener('keydown', handleEscape);
     };
-  }, [isVisible]);
+  }, [isVisible, isModal, onClose]);
 
   const handleClose = () => {
-    setIsVisible(false);
-    setTimeout(() => onClose(), 300);
+    if (onClose) {
+      setIsVisible(false);
+      setTimeout(() => onClose(), 300);
+    }
   };
 
+  const playerContent = (
+    <div style={{ position: 'relative', paddingTop: '56.25%' }}>
+      <iframe
+        src={`https://streamtape.com/e/${fileId}?autoplay=true`}
+        loading="lazy"
+        style={{
+          border: 'none',
+          position: 'absolute',
+          top: '0',
+          height: '100%',
+          width: '100%',
+        }}
+        allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
+        allowFullScreen={true}
+      />
+    </div>
+  );
+
+  // Se não for modal, retornar apenas o player
+  if (!isModal) {
+    return <div className="w-full">{playerContent}</div>;
+  }
+
+  // Se for modal, retornar com overlay e botão de fechar
   return (
     <div
       className={`fixed inset-0 z-50 bg-black transition-opacity duration-300 ${
@@ -51,21 +82,7 @@ export default function VideoPlayer({ fileId, onClose }: VideoPlayerProps) {
       >
         <div className="relative w-full max-w-6xl mx-4">
           {/* Video Container */}
-          <div style={{ position: 'relative', paddingTop: '56.25%' }}>
-            <iframe
-              src={`https://streamtape.com/e/${fileId}?autoplay=true`}
-              loading="lazy"
-              style={{
-                border: 'none',
-                position: 'absolute',
-                top: '0',
-                height: '100%',
-                width: '100%',
-              }}
-              allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
-              allowFullScreen={true}
-            />
-          </div>
+          {playerContent}
 
           {/* Close Button - Abaixo do player */}
           <button

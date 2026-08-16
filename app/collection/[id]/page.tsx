@@ -54,7 +54,8 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
   
   // Mapeamento de pastas Streamtape para IDs TMDb
   const folderMappings: Record<string, { seriesId: string; seasonNumber: string }> = {
-    'Je_MCGJs5lQ': { seriesId: '4604', seasonNumber: '1' } // Smallville Temporada 1
+    'Je_MCGJs5lQ': { seriesId: '4604', seasonNumber: '1' }, // Smallville Temporada 1
+    'WAP4-waQ7H8': { seriesId: '45815', seasonNumber: '1' } // Avenida Brasil Temporada 1
   };
   
   const mapping = folderMappings[folderId];
@@ -74,31 +75,68 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
   const episodes = folderData?.files || [];
   
   // Enriquecer episódios com dados do TMDb
-  const enrichedEpisodes = episodes.map((file: any) => {
-    const fileName = file.name || '';
-    
-    // Tentar extrair número do episódio do nome do arquivo (ex: "1x01" -> episodio 1)
-    let episodeNumber = 1;
-    const match = fileName.match(/(\d+)x(\d+)/i);
-    if (match) {
-      episodeNumber = parseInt(match[2]);
-    }
-    
-    // Buscar dados do episódio no TMDb
-    const tmdbEpisode = seasonData?.episodes?.find((ep: any) => ep.episode_number === episodeNumber);
-    
-    return {
-      ...file,
-      tmdbEpisode,
-      title: tmdbEpisode?.name || fileName,
-      overview: tmdbEpisode?.overview || 'Sem descrição',
-      stillUrl: tmdbEpisode?.still_path
-        ? `https://image.tmdb.org/t/p/w500${tmdbEpisode.still_path}`
-        : null,
-      episodeNumber: tmdbEpisode?.episode_number || episodeNumber,
-      seasonNumber: tmdbEpisode?.season_number || 1
-    };
-  });
+  let enrichedEpisodes: any[] = [];
+  
+  if (seasonData?.episodes && seasonData.episodes.length > 0) {
+    // Se temos dados do TMDb, usar todos os episódios do TMDb e tentar fazer match com arquivos
+    enrichedEpisodes = seasonData.episodes.map((tmdbEpisode: any) => {
+      // Tentar encontrar arquivo correspondente no Streamtape
+      const episodeNumber = tmdbEpisode.episode_number;
+      const seasonNumber = tmdbEpisode.season_number;
+      
+      // Tentar encontrar arquivo pelo número do episódio
+      const matchingFile = episodes.find((file: any) => {
+        const fileName = file.name || '';
+        const match = fileName.match(/(\d+)x(\d+)/i);
+        if (match) {
+          const fileSeason = parseInt(match[1]);
+          const fileEpisode = parseInt(match[2]);
+          return fileSeason === seasonNumber && fileEpisode === episodeNumber;
+        }
+        return false;
+      });
+      
+      return {
+        tmdbEpisode,
+        file: matchingFile || null,
+        title: tmdbEpisode.name || `Episódio ${episodeNumber}`,
+        overview: tmdbEpisode.overview || 'Sem descrição',
+        stillUrl: tmdbEpisode.still_path
+          ? `https://image.tmdb.org/t/p/w500${tmdbEpisode.still_path}`
+          : null,
+        episodeNumber: tmdbEpisode.episode_number,
+        seasonNumber: tmdbEpisode.season_number,
+        linkid: matchingFile?.linkid || null,
+        hasVideo: !!matchingFile
+      };
+    });
+  } else {
+    // Se não temos dados do TMDb, usar apenas arquivos do Streamtape
+    enrichedEpisodes = episodes.map((file: any) => {
+      const fileName = file.name || '';
+      
+      // Tentar extrair número do episódio do nome do arquivo (ex: "1x01" -> episodio 1)
+      let episodeNumber = 1;
+      let seasonNumber = 1;
+      const match = fileName.match(/(\d+)x(\d+)/i);
+      if (match) {
+        seasonNumber = parseInt(match[1]);
+        episodeNumber = parseInt(match[2]);
+      }
+      
+      return {
+        ...file,
+        tmdbEpisode: null,
+        title: fileName,
+        overview: 'Sem descrição',
+        stillUrl: null,
+        episodeNumber,
+        seasonNumber,
+        linkid: file.linkid,
+        hasVideo: true
+      };
+    });
+  }
   
   // Ordenar episódios pelo número
   enrichedEpisodes.sort((a: any, b: any) => a.episodeNumber - b.episodeNumber);
@@ -172,56 +210,91 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
           <h2 className="text-2xl font-bold text-white mb-8">Episódios</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {enrichedEpisodes.map((video: any) => {
+            {enrichedEpisodes.map((video: any, index: number) => {
               const episodeTitle = video.title;
               const thumbnailUrl = video.stillUrl;
-              const duration = video.length ? `${Math.floor(video.length / 60)}:${(video.length % 60).toString().padStart(2, '0')}` : 'N/A';
               const episodeNumber = video.episodeNumber;
               const seasonNumber = video.seasonNumber;
+              const hasVideo = video.hasVideo;
+              const linkid = video.linkid;
               
               return (
-                <Link
-                  key={video.linkid}
-                  href={`/movie/${video.linkid}`}
-                  className="group relative bg-zinc-800 rounded-xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-red-500/20"
+                <div
+                  key={`${seasonNumber}-${episodeNumber}-${index}`}
+                  className={`group relative bg-zinc-800 rounded-xl overflow-hidden transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-red-500/20 ${!hasVideo ? 'opacity-60' : ''}`}
                 >
-                  <div className="relative aspect-video overflow-hidden">
-                    {thumbnailUrl ? (
-                      <Image
-                        src={thumbnailUrl}
-                        alt={episodeTitle}
-                        fill
-                        className="object-cover transition-transform duration-300 group-hover:scale-110"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-zinc-700 flex items-center justify-center">
-                        <span className="text-zinc-500 text-sm">Sem imagem</span>
+                  {hasVideo && linkid ? (
+                    <Link href={`/episode/${linkid}`}>
+                      <div className="relative aspect-video overflow-hidden">
+                        {thumbnailUrl ? (
+                          <Image
+                            src={thumbnailUrl}
+                            alt={episodeTitle}
+                            fill
+                            className="object-cover transition-transform duration-300 group-hover:scale-110"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-zinc-700 flex items-center justify-center">
+                            <span className="text-zinc-500 text-sm">Sem imagem</span>
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                        <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm text-white text-xs font-bold px-2 py-1 rounded">
+                          {seasonNumber}x{episodeNumber.toString().padStart(2, '0')}
+                        </div>
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                          <div className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center">
+                            <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M8 5v14l11-7z"/>
+                            </svg>
+                          </div>
+                        </div>
                       </div>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                    <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm text-white text-xs font-bold px-2 py-1 rounded">
-                      {seasonNumber}x{episodeNumber.toString().padStart(2, '0')}
-                    </div>
-                    <div className="absolute bottom-2 right-2 bg-black/60 backdrop-blur-sm text-white text-xs font-bold px-2 py-1 rounded">
-                      {duration}
-                    </div>
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                      <div className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center">
-                        <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M8 5v14l11-7z"/>
-                        </svg>
+                      <div className="p-4">
+                        <h3 className="text-white font-semibold text-sm mb-1 line-clamp-2">
+                          {episodeTitle}
+                        </h3>
+                        <p className="text-zinc-400 text-xs line-clamp-2">
+                          {video.overview}
+                        </p>
+                      </div>
+                    </Link>
+                  ) : (
+                    <div className="relative aspect-video overflow-hidden">
+                      {thumbnailUrl ? (
+                        <Image
+                          src={thumbnailUrl}
+                          alt={episodeTitle}
+                          fill
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-zinc-700 flex items-center justify-center">
+                          <span className="text-zinc-500 text-sm">Sem imagem</span>
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="bg-yellow-600 text-white text-xs font-bold px-3 py-1 rounded mb-2">
+                            Em breve
+                          </div>
+                          <div className="text-white text-sm">Episódio indisponível</div>
+                        </div>
+                      </div>
+                      <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm text-white text-xs font-bold px-2 py-1 rounded">
+                        {seasonNumber}x{episodeNumber.toString().padStart(2, '0')}
+                      </div>
+                      <div className="p-4">
+                        <h3 className="text-white font-semibold text-sm mb-1 line-clamp-2">
+                          {episodeTitle}
+                        </h3>
+                        <p className="text-zinc-400 text-xs line-clamp-2">
+                          {video.overview}
+                        </p>
                       </div>
                     </div>
-                  </div>
-                  <div className="p-4">
-                    <h3 className="text-white font-semibold text-sm mb-1 line-clamp-2">
-                      {episodeTitle}
-                    </h3>
-                    <p className="text-zinc-400 text-xs line-clamp-2">
-                      {video.overview}
-                    </p>
-                  </div>
-                </Link>
+                  )}
+                </div>
               );
             })}
           </div>
