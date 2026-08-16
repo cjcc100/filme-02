@@ -4,10 +4,19 @@ import { config } from '@/lib/config';
 const MANUAL_MAPPING: Record<string, number> = {
   'gigantes de aço': 39254,
   'gigantes de aco': 39254,
+  'gigantes de aço 2011': 39254,
+  'gigantes de aco 2011': 39254,
+  'gigantes de aço 2011.mkv': 39254,
+  'gigantes de aço 2011.mkv.mp4': 39254,
   'quarteto fantastico': 617126,
   'quarteto fantastico primeiros passos': 617126,
+  'quarteto fantastico primeiros passos 2025': 617126,
+  'quarteto fantastico primeiros passos 2025.mkv': 617126,
+  'quarteto fantastico primeiros passos 2025.mkv.mp4': 617126,
   'a ultima casa': 1284041,
   'ultima casa': 1284041,
+  'a ultima casa 2026': 1284041,
+  'a ultima casa 2026.mp4': 1284041,
 };
 
 export async function GET() {

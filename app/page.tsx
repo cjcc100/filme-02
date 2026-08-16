@@ -35,10 +35,19 @@ async function getStreamtapeFiles() {
 const MANUAL_MAPPING: Record<string, number> = {
   'gigantes de aço': 39254,
   'gigantes de aco': 39254,
+  'gigantes de aço 2011': 39254,
+  'gigantes de aco 2011': 39254,
+  'gigantes de aço 2011.mkv': 39254,
+  'gigantes de aço 2011.mkv.mp4': 39254,
   'quarteto fantastico': 617126,
   'quarteto fantastico primeiros passos': 617126,
+  'quarteto fantastico primeiros passos 2025': 617126,
+  'quarteto fantastico primeiros passos 2025.mkv': 617126,
+  'quarteto fantastico primeiros passos 2025.mkv.mp4': 617126,
   'a ultima casa': 1284041,
   'ultima casa': 1284041,
+  'a ultima casa 2026': 1284041,
+  'a ultima casa 2026.mp4': 1284041,
 };
 
 async function searchTMDBMovie(query: string) {
@@ -47,29 +56,36 @@ async function searchTMDBMovie(query: string) {
     
     console.log('Original query:', query);
     
-    // Verificar mapeamento manual primeiro
-    const normalizedQuery = query.toLowerCase()
-      .replace(/\.[^/.]+$/, '')
-      .replace(/\d{4}/g, '')
-      .replace(/[._-]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+    // Verificar mapeamento manual primeiro - tentar várias normalizações
+    const variations = [
+      query.toLowerCase(),
+      query.toLowerCase().replace(/\.[^/.]+$/, ''),
+      query.toLowerCase().replace(/\d{4}/g, ''),
+      query.toLowerCase().replace(/[._-]/g, ' '),
+      query.toLowerCase().replace(/\.[^/.]+$/, '').replace(/\d{4}/g, '').replace(/[._-]/g, ' ').replace(/\s+/g, ' ').trim(),
+      query.toLowerCase().replace(/\.[^/.]+$/, '').replace(/[._-]/g, ' ').replace(/\s+/g, ' ').trim(),
+    ];
     
-    if (MANUAL_MAPPING[normalizedQuery]) {
-      const tmdbId = MANUAL_MAPPING[normalizedQuery];
-      console.log('Found manual mapping for:', normalizedQuery, '-> TMDb ID:', tmdbId);
-      
-      // Buscar dados completos do filme usando o ID
-      const movieRes = await fetch(`${config.tmdb.baseUrl}/movie/${tmdbId}?api_key=${tmdbApiKey}&language=pt-BR`, {
-        next: { revalidate: 3600 }
-      });
-      
-      if (movieRes.ok) {
-        const movieData = await movieRes.json();
-        console.log('Retrieved movie data from manual mapping:', movieData.title);
-        return movieData;
+    for (const variation of variations) {
+      const trimmed = variation.trim();
+      if (MANUAL_MAPPING[trimmed]) {
+        const tmdbId = MANUAL_MAPPING[trimmed];
+        console.log('Found manual mapping for:', trimmed, '-> TMDb ID:', tmdbId);
+        
+        // Buscar dados completos do filme usando o ID
+        const movieRes = await fetch(`${config.tmdb.baseUrl}/movie/${tmdbId}?api_key=${tmdbApiKey}&language=pt-BR`, {
+          next: { revalidate: 3600 }
+        });
+        
+        if (movieRes.ok) {
+          const movieData = await movieRes.json();
+          console.log('Retrieved movie data from manual mapping:', movieData.title);
+          return movieData;
+        }
       }
     }
+    
+    console.log('No manual mapping found for:', query);
     
     // Função melhorada de limpeza de nome com remoção de acentos
     function cleanFileName(filename: string): string {
