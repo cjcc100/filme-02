@@ -46,6 +46,46 @@ async function getTMDBSeriesData(seriesId: string, seasonNumber: string) {
   }
 }
 
+async function searchTMDBSeries(folderName: string) {
+  try {
+    const tmdbApiKey = '07c1396db17afadc024cbb5f0c3701c2';
+    
+    // Função para limpar o nome da pasta
+    function cleanFolderName(name: string): string {
+      return name
+        .replace(/\d{4}/g, '') // Remover anos (2026, etc)
+        .replace(/Temporada \d+/gi, '') // Remover "Temporada X"
+        .replace(/:.*$/, '') // Remover tudo após dois pontos
+        .replace(/\s+/g, ' ') // Remover espaços extras
+        .trim();
+    }
+    
+    const cleanName = cleanFolderName(folderName);
+    console.log('Searching TMDb for:', cleanName);
+    
+    const searchRes = await fetch(`https://api.themoviedb.org/3/search/tv?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanName)}`, {
+      next: { revalidate: 600 }
+    });
+    
+    if (searchRes.ok) {
+      const searchData = await searchRes.json();
+      if (searchData.results && searchData.results.length > 0) {
+        const firstResult = searchData.results[0];
+        console.log('Found series:', firstResult.name, 'ID:', firstResult.id);
+        
+        // Buscar dados completos da série e primeira temporada
+        const seriesData = await getTMDBSeriesData(firstResult.id.toString(), '1');
+        return seriesData;
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error searching TMDb series:', error);
+    return null;
+  }
+}
+
 export default async function CollectionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const folderId = id;
@@ -55,11 +95,25 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
   // Mapeamento de pastas Streamtape para IDs TMDb
   const folderMappings: Record<string, { seriesId: string; seasonNumber: string }> = {
     'Je_MCGJs5lQ': { seriesId: '4604', seasonNumber: '1' }, // Smallville Temporada 1
-    'WAP4-waQ7H8': { seriesId: '45815', seasonNumber: '1' } // Avenida Brasil Temporada 1
+    'WAP4-waQ7H8': { seriesId: '45815', seasonNumber: '1' }, // Avenida Brasil Temporada 1
+    'R2StpPkKoWs': { seriesId: '331061', seasonNumber: '1' }, // Voepass 2283: A Queda Temporada 1
+    'HdsqTHs6H40': { seriesId: '82452', seasonNumber: '2' } // Avatar: O Último Mestre do Ar Temporada 2
   };
   
   const mapping = folderMappings[folderId];
-  const tmdbData = mapping ? await getTMDBSeriesData(mapping.seriesId, mapping.seasonNumber) : null;
+  let tmdbData = null;
+  
+  if (mapping) {
+    // Usar mapeamento manual se existir
+    tmdbData = await getTMDBSeriesData(mapping.seriesId, mapping.seasonNumber);
+  } else {
+    // Tentar busca automática pelo nome da pasta
+    const folderName = folderData?.folders?.[0]?.name || '';
+    if (folderName) {
+      tmdbData = await searchTMDBSeries(folderName);
+    }
+  }
+  
   const seriesData = tmdbData?.series;
   const seasonData = tmdbData?.season;
   
