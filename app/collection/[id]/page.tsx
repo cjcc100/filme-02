@@ -1,13 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
-import { config } from "@/lib/config";
 
 async function getStreamtapeFolder(folderId: string) {
   try {
-    const streamtapeLogin = config.streamtape.login;
-    const streamtapeKey = config.streamtape.key;
+    const streamtapeLogin = '4db68bae5deec46b3a4b';
+    const streamtapeKey = 'a7azDDb68ACx8dP';
     
-    const res = await fetch(`${config.streamtape.apiUrl}/file/listfolder?login=${streamtapeLogin}&key=${streamtapeKey}&folder=${folderId}`, {
+    const res = await fetch(`https://api.streamtape.com/file/listfolder?login=${streamtapeLogin}&key=${streamtapeKey}&folder=${folderId}`, {
       headers: {
         'Accept': 'application/json',
       },
@@ -26,13 +25,13 @@ async function getStreamtapeFolder(folderId: string) {
 
 async function getTMDBSeriesData(seriesId: string, seasonNumber: string) {
   try {
-    const tmdbApiKey = config.tmdb.apiKey;
+    const tmdbApiKey = '07c1396db17afadc024cbb5f0c3701c2';
     
-    const seriesRes = await fetch(`${config.tmdb.baseUrl}/tv/${seriesId}?api_key=${tmdbApiKey}&language=pt-BR`, {
+    const seriesRes = await fetch(`https://api.themoviedb.org/3/tv/${seriesId}?api_key=${tmdbApiKey}&language=pt-BR`, {
       next: { revalidate: 3600 }
     });
     
-    const seasonRes = await fetch(`${config.tmdb.baseUrl}/tv/${seriesId}/season/${seasonNumber}?api_key=${tmdbApiKey}&language=pt-BR`, {
+    const seasonRes = await fetch(`https://api.themoviedb.org/3/tv/${seriesId}/season/${seasonNumber}?api_key=${tmdbApiKey}&language=pt-BR`, {
       next: { revalidate: 3600 }
     });
     
@@ -49,7 +48,7 @@ async function getTMDBSeriesData(seriesId: string, seasonNumber: string) {
 
 async function searchTMDBSeries(folderName: string) {
   try {
-    const tmdbApiKey = config.tmdb.apiKey;
+    const tmdbApiKey = '07c1396db17afadc024cbb5f0c3701c2';
     
     // Função para limpar o nome da pasta
     function cleanFolderName(name: string): string {
@@ -64,7 +63,7 @@ async function searchTMDBSeries(folderName: string) {
     const cleanName = cleanFolderName(folderName);
     console.log('Searching TMDb for:', cleanName);
     
-    const searchRes = await fetch(`${config.tmdb.baseUrl}/search/tv?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanName)}`, {
+    const searchRes = await fetch(`https://api.themoviedb.org/3/search/tv?api_key=${tmdbApiKey}&language=pt-BR&query=${encodeURIComponent(cleanName)}`, {
       next: { revalidate: 600 }
     });
     
@@ -107,46 +106,6 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
   if (mapping) {
     // Usar mapeamento manual se existir
     tmdbData = await getTMDBSeriesData(mapping.seriesId, mapping.seasonNumber);
-    
-    // Se não tiver dados da temporada específica, tentar buscar todas as temporadas
-    if (!tmdbData?.season || tmdbData.season.episodes.length === 0) {
-      console.log('No episodes in season', mapping.seasonNumber, 'trying to find available seasons...');
-      
-      try {
-        const tmdbApiKey = config.tmdb.apiKey;
-        const seriesRes = await fetch(`${config.tmdb.baseUrl}/tv/${mapping.seriesId}?api_key=${tmdbApiKey}&language=pt-BR`, {
-          next: { revalidate: 3600 }
-        });
-        
-        if (seriesRes.ok) {
-          const seriesFullData = await seriesRes.json();
-          const totalSeasons = seriesFullData.number_of_seasons || 1;
-          
-          console.log('Total seasons:', totalSeasons);
-          
-          // Tentar cada temporada até encontrar uma com episódios
-          for (let s = 1; s <= totalSeasons; s++) {
-            const seasonRes = await fetch(`${config.tmdb.baseUrl}/tv/${mapping.seriesId}/season/${s}?api_key=${tmdbApiKey}&language=pt-BR`, {
-              next: { revalidate: 3600 }
-            });
-            
-            if (seasonRes.ok) {
-              const seasonData = await seasonRes.json();
-              if (seasonData.episodes && seasonData.episodes.length > 0) {
-                console.log('Found episodes in season', s);
-                tmdbData = {
-                  series: seriesFullData,
-                  season: seasonData
-                };
-                break;
-              }
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error trying alternative seasons:', error);
-      }
-    }
   } else {
     // Tentar busca automática pelo nome da pasta
     const folderName = folderData?.folders?.[0]?.name || '';
@@ -179,35 +138,15 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
       const episodeNumber = tmdbEpisode.episode_number;
       const seasonNumber = tmdbEpisode.season_number;
       
-      // Tentar encontrar arquivo pelo número do episódio (mais flexível)
+      // Tentar encontrar arquivo pelo número do episódio
       const matchingFile = episodes.find((file: any) => {
-        const fileName = (file.name || '').toLowerCase();
-        
-        // Match 1: Formato "SxE" ou "x" (ex: "2x04", "2x04.mp4", "S02E04")
-        const match1 = fileName.match(/(\d+)[xXeE](\d+)/);
-        if (match1) {
-          const fileSeason = parseInt(match1[1]);
-          const fileEpisode = parseInt(match1[2]);
+        const fileName = file.name || '';
+        const match = fileName.match(/(\d+)x(\d+)/i);
+        if (match) {
+          const fileSeason = parseInt(match[1]);
+          const fileEpisode = parseInt(match[2]);
           return fileSeason === seasonNumber && fileEpisode === episodeNumber;
         }
-        
-        // Match 2: Formato "S02E04" 
-        const match2 = fileName.match(/s(\d+)e(\d+)/i);
-        if (match2) {
-          const fileSeason = parseInt(match2[1]);
-          const fileEpisode = parseInt(match2[2]);
-          return fileSeason === seasonNumber && fileEpisode === episodeNumber;
-        }
-        
-        // Match 3: Apenas o número do episódio se for temporada 1
-        if (seasonNumber === 1) {
-          const match3 = fileName.match(/(\d+)/);
-          if (match3) {
-            const fileEpisode = parseInt(match3[1]);
-            return fileEpisode === episodeNumber;
-          }
-        }
-        
         return false;
       });
       

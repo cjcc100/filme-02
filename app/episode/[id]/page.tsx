@@ -113,19 +113,10 @@ export default async function EpisodePage({ params, searchParams }: { params: Pr
   // Tentar extrair informações do episódio do nome do arquivo
   let episodeNumber = 1;
   let seasonNumber = 1;
-  
-  // Match mais flexível para diferentes formatos
-  const match1 = fileName.match(/(\d+)[xXeE](\d+)/);
-  if (match1) {
-    seasonNumber = parseInt(match1[1]);
-    episodeNumber = parseInt(match1[2]);
-  } else {
-    // Tentar formato S02E04
-    const match2 = fileName.match(/s(\d+)e(\d+)/i);
-    if (match2) {
-      seasonNumber = parseInt(match2[1]);
-      episodeNumber = parseInt(match2[2]);
-    }
+  const match = fileName.match(/(\d+)x(\d+)/i);
+  if (match) {
+    seasonNumber = parseInt(match[1]);
+    episodeNumber = parseInt(match[2]);
   }
   
   // Buscar dados do TMDb
